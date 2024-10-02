@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数学练习应用</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            text-align: center;
+        }
+        select, input, button {
+            font-size: 16px;
+            margin: 10px;
+            padding: 5px;
+        }
+        #questionDisplay {
+            font-size: 24px;
+            margin: 20px 0;
+        }
+        #result, #wrongQuestions {
+            margin-top: 20px;
+            text-align: left;
+        }
+        #timer {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        #remaining {
+            font-size: 18px;
+            margin: 10px 0;
+        }
+        #answer {
+            font-size: 24px;
+            padding: 10px;
+            width: 200px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>数学练习应用</h1>
+    <div id="setup">
+        <select id="practiceMode">
+            <option value="regular">常规练习</option>
+            <option value="wrong">错题练习</option>
+        </select>
+        <select id="practiceType">
+            <option value="1">进位加法</option>
+            <option value="2">退位减法</option>
+            <option value="3">加减随机</option>
+            <option value="4">连加</option>
+            <option value="5">连减</option>
+            <option value="6">加减混合</option>
+            <option value="7">所有混合</option>
+        </select>
+        <input type="number" id="difficulty" placeholder="每题时间（秒）" min="1" value="5">
+        <input type="number" id="numQuestions" placeholder="题目数量" min="1" value="20">
+        <button onclick="startPractice()">开始练习</button>
+    </div>
+    <div id="practice" style="display: none;">
+        <div id="timer"></div>
+        <div id="remaining"></div>
+        <div id="questionDisplay"></div>
+        <input type="number" id="answer" placeholder="请输入答案" inputmode="numeric" pattern="[0-9]*">
+    </div>
+    <div id="result"></div>
+    <div id="wrongQuestions"></div>
+
+    <script>
+        let currentQuestion, correctAnswer, questionCount, correctCount, wrongQuestions;
+        let startTime, timeLimit, timerInterval;
+        let allWrongQuestions = JSON.parse(localStorage.getItem('allWrongQuestions')) || [];
+        let totalQuestions;
+        let practiceMode;
+
+        function generateQuestion(type, isWrongQuestion = false) {
+            if (isWrongQuestion && allWrongQuestions.length > 0) {
+                const randomIndex = Math.floor(Math.random() * allWrongQuestions.length);
+                const wrongQuestion = allWrongQuestions[randomIndex];
+                return { question: wrongQuestion.question, answer: wrongQuestion.answer };
+            }
+
+            let a, b, c, question, answer;
+            switch (parseInt(type)) {
+                case 1: // 进位加法
+                    do {
+                        a = Math.floor(Math.random() * 9) + 1;
+                        b = Math.floor(Math.random() * 9) + 1;
+                    } while (a + b < 10);
+                    question = `${a} + ${b} = ?`;
+                    answer = a + b;
+                    break;
+                case 2: // 退位减法（十几减几）
+                    a = Math.floor(Math.random() * 9) + 11; // 11到19之间的数
+                    do {
+                        b = Math.floor(Math.random() * 9) + 1;
+                    } while (a - b >= 10);
+                    question = `${a} - ${b} = ?`;
+                    answer = a - b;
+                    break;
+                case 3: // 加减随机
+                    if (Math.random() < 0.5) {
+                        return generateQuestion(1); // 进位加法
+                    } else {
+                        return generateQuestion(2); // 退位减法
+                    }
+                case 4: // 连加
+                    do {
+                        a = Math.floor(Math.random() * 9) + 1;
+                        b = Math.floor(Math.random() * 9) + 1;
+                        c = Math.floor(Math.random() * 9) + 1;
+                    } while (a + b + c < 20);
+                    question = `${a} + ${b} + ${c} = ?`;
+                    answer = a + b + c;
+                    break;
+                case 5: // 连减
+                    a = Math.floor(Math.random() * 9) + 11; // 11到19之间的数
+                    do {
+                        b = Math.floor(Math.random() * 9) + 1;
+                        c = Math.floor(Math.random() * 9) + 1;
+                    } while (a - b - c < 1 || a - b - c >= 10);
+                    question = `${a} - ${b} - ${c} = ?`;
+                    answer = a - b - c;
+                    break;
+                case 6: // 加减混合
+                    if (Math.random() < 0.5) {
+                        return generateQuestion(4); // 连加
+                    } else {
+                        return generateQuestion(5); // 连减
+                    }
+                case 7: // 所有混合
+                    const randomType = Math.floor(Math.random() * 5) + 1;
+                    return generateQuestion(randomType);
+            }
+            return { question, answer };
+        }
+
+        function startPractice() {
+            practiceMode = document.getElementById('practiceMode').value;
+            const practiceType = document.getElementById('practiceType').value;
+            timeLimit = parseInt(document.getElementById('difficulty').value) * 1000;
+            questionCount = parseInt(document.getElementById('numQuestions').value);
+            totalQuestions = questionCount;
+            correctCount = 0;
+            wrongQuestions = [];
+
+            document.getElementById('setup').style.display = 'none';
+            document.getElementById('practice').style.display = 'block';
+            document.getElementById('result').innerHTML = '';
+            document.getElementById('wrongQuestions').innerHTML = '';
+
+            nextQuestion(practiceMode === 'wrong');
+        }
+
+        function nextQuestion(isWrongQuestion) {
+            if (questionCount > 0) {
+                const { question, answer } = generateQuestion(document.getElementById('practiceType').value, isWrongQuestion);
+                currentQuestion = question;
+                correctAnswer = answer;
+                document.getElementById('questionDisplay').textContent = question;
+                document.getElementById('answer').value = '';
+                document.getElementById('answer').focus();
+                document.getElementById('remaining').textContent = `剩余题目：${questionCount} / ${totalQuestions}`;
+                startTime = Date.now();
+                questionCount--;
+                startTimer();
+            } else {
+                endPractice();
+            }
+        }
+
+        function startTimer() {
+            clearInterval(timerInterval);
+            const timerDisplay = document.getElementById('timer');
+            timerInterval = setInterval(() => {
+                const remainingTime = Math.max(0, Math.ceil((timeLimit - (Date.now() - startTime)) / 1000));
+                timerDisplay.textContent = `剩余时间：${remainingTime}秒`;
+                if (remainingTime === 0) {
+                    clearInterval(timerInterval);
+                    submitAnswer();
+                }
+            }, 100);
+        }
+
+        function submitAnswer() {
+            clearInterval(timerInterval);
+            const userAnswer = parseInt(document.getElementById('answer').value);
+            if (userAnswer === correctAnswer) {
+                correctCount++;
+            } else {
+                wrongQuestions.push({ question: currentQuestion, answer: correctAnswer, userAnswer: isNaN(userAnswer) ? '未作答' : userAnswer });
+                if (!allWrongQuestions.some(q => q.question === currentQuestion)) {
+                    allWrongQuestions.push({ question: currentQuestion, answer: correctAnswer });
+                    localStorage.setItem('allWrongQuestions', JSON.stringify(allWrongQuestions));
+                }
+            }
+            nextQuestion(practiceMode === 'wrong');
+        }
+
+        document.getElementById('answer').addEventListener('keyup', function(event) {
+            if (event.key === 'Enter') {
+                submitAnswer();
+            }
+        });
+
+        function endPractice() {
+            clearInterval(timerInterval);
+            document.getElementById('practice').style.display = 'none';
+            document.getElementById('setup').style.display = 'block';
+
+            const accuracy = (correctCount / totalQuestions) * 100;
+            document.getElementById('result').innerHTML = `
+                <h2>练习结束</h2>
+                <p>正确率: ${accuracy.toFixed(2)}%</p>
+            `;
+
+            if (wrongQuestions.length > 0) {
+                let wrongQuestionsHtml = '<h3>本次练习错误的题目:</h3><ul>';
+                wrongQuestions.forEach(q => {
+                    wrongQuestionsHtml += `<li>${q.question} 正确答案：${q.answer}，您的答案：${q.userAnswer}</li>`;
+                });
+                wrongQuestionsHtml += '</ul>';
+                document.getElementById('wrongQuestions').innerHTML = wrongQuestionsHtml;
+            } else {
+                document.getElementById('wrongQuestions').innerHTML = '<p>本次练习全对，做得不错！</p>';
+            }
+
+            if (allWrongQuestions.length > 0) {
+                let allWrongQuestionsHtml = '<h3>累计错题:</h3><ul>';
+                allWrongQuestions.forEach(q => {
+                    allWrongQuestionsHtml += `<li>${q.question} 正确答案：${q.answer}</li>`;
+                });
+                allWrongQuestionsHtml += '</ul>';
+                document.getElementById('wrongQuestions').innerHTML += allWrongQuestionsHtml;
+            }
+        }
+    </script>
+</body>
+</html>
