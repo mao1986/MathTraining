@@ -21,9 +21,6 @@
             box-sizing: border-box;
             overflow-y: auto;
         }
-        #nav h2 {
-            text-align: center;
-        }
         #nav button {
             width: 100%;
             margin: 10px 0;
@@ -45,7 +42,7 @@
             padding: 5px;
         }
         #questionDisplay {
-            font-size: 24px;
+            font-size: 64px;
             margin: 20px 0;
         }
         #result, #wrongQuestions, #mistakeListDisplay {
@@ -58,10 +55,11 @@
             margin: 10px 0;
         }
         #answer {
-            font-size: 24px;
+            font-size: 64px;
             padding: 10px;
             width: 200px;
             text-align: center;
+            margin-left: 10px;
         }
         #progressBar {
             height: 20px;
@@ -77,6 +75,7 @@
         #practiceButtons button {
             margin: 5px;
             padding: 10px 20px;
+            font-size: 16px;
         }
         #customQuestionsContainer, #settingsContainer, #mistakeListContainer {
             display: none;
@@ -90,6 +89,19 @@
         }
         .mistake-column h3 {
             text-align: center;
+        }
+        /* 练习区域布局 */
+        #practiceArea {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: calc(100vh - 160px);
+        }
+        #questionInputContainer {
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         /* 响应式处理 */
         @media (max-width: 600px) {
@@ -106,7 +118,6 @@
 <body>
     <!-- 左侧导航栏 -->
     <div id="nav">
-        <h2>导航</h2>
         <button onclick="showSection('settings')">常规练习</button>
         <button onclick="startPractice('wrong')">错题练习</button>
         <button onclick="showSection('custom')">自定义练习</button>
@@ -141,12 +152,16 @@
             <div id="timer"></div>
             <div id="remaining"></div>
             <div id="progressBar"><div id="progress"></div></div>
-            <div id="questionDisplay"></div>
-            <input type="number" id="answer" placeholder="请输入答案" inputmode="numeric" pattern="[0-9]*">
-            <div id="practiceButtons">
-                <button id="pauseButton" onclick="togglePause()">暂停</button>
-                <button onclick="restartPractice()">重新开始</button>
-                <button onclick="exitPractice()">退出</button>
+            <div id="practiceArea">
+                <div id="questionInputContainer">
+                    <div id="questionDisplay"></div>
+                    <input type="number" id="answer" placeholder="" inputmode="numeric" pattern="[0-9]*">
+                </div>
+                <div id="practiceButtons">
+                    <button id="pauseButton" onclick="togglePause()">暂停</button>
+                    <button onclick="restartPractice()">重新开始</button>
+                    <button onclick="exitPractice()">退出</button>
+                </div>
             </div>
         </div>
 
@@ -262,7 +277,7 @@
                 } else if (operator === '-') {
                     answer = a - b;
                 }
-                questions.push({ question: `${a} ${operator} ${b} = ?`, answer });
+                questions.push({ question: `${a} ${operator} ${b} =`, answer });
             });
             return questions;
         }
@@ -308,7 +323,7 @@
                         a = getRandomInt(1, 9);
                         b = getRandomInt(1, 9);
                         if (a + b >= 11 && a + b !== 10 && !questionSet.has(`${a} + ${b}`)) {
-                            question = `${a} + ${b} = ?`;
+                            question = `${a} + ${b} =`;
                             answer = a + b;
                             questionSet.add(`${a} + ${b}`);
                             return { question, answer };
@@ -318,7 +333,7 @@
                         a = getRandomInt(11, 19);
                         b = getRandomInt(1, 9);
                         if (a - b < 10 && a - b !== 10 && !questionSet.has(`${a} - ${b}`)) {
-                            question = `${a} - ${b} = ?`;
+                            question = `${a} - ${b} =`;
                             answer = a - b;
                             questionSet.add(`${a} - ${b}`);
                             return { question, answer };
@@ -380,9 +395,16 @@
         }
 
         // 提交答案
-        document.getElementById('answer').addEventListener('keyup', function(event) {
-            if (event.key === 'Enter') {
+        const answerInput = document.getElementById('answer');
+        answerInput.addEventListener('keyup', function(event) {
+            if (event.key === 'Enter' || event.key === ' ') {
                 submitAnswer();
+            }
+        });
+
+        answerInput.addEventListener('keydown', function(event) {
+            if (event.key === ' ') {
+                event.preventDefault(); // 阻止空格输入到输入框中
             }
         });
 
@@ -440,7 +462,7 @@
             if (wrongQuestions.length > 0) {
                 let wrongQuestionsHtml = '<h3>本次练习错误的题目:</h3><ul>';
                 wrongQuestions.forEach(q => {
-                    wrongQuestionsHtml += `<li>${q.question.replace('= ?', '')} 正确答案：${q.answer}</li>`;
+                    wrongQuestionsHtml += `<li>${q.question}</li>`;
                 });
                 wrongQuestionsHtml += '</ul>';
                 document.getElementById('resultContainer').innerHTML += wrongQuestionsHtml;
@@ -498,7 +520,7 @@
                 } else {
                     containerHtml += '<ul>';
                     filteredMistakes.forEach(q => {
-                        containerHtml += `<li>${q.question.replace('= ?', '')} 正确答案：${q.answer}</li>`;
+                        containerHtml += `<li>${q.question}</li>`;
                     });
                     containerHtml += '</ul>';
                     containerHtml += `<button onclick="startMistakePractice('${t.type}')">开始错题练习</button>`;
