@@ -25,13 +25,9 @@
             margin-top: 20px;
             text-align: left;
         }
-        #timer {
+        #timer, #remaining {
             font-size: 18px;
             font-weight: bold;
-            margin: 10px 0;
-        }
-        #remaining {
-            font-size: 18px;
             margin: 10px 0;
         }
         #answer {
@@ -39,6 +35,17 @@
             padding: 10px;
             width: 200px;
             text-align: center;
+        }
+        #progressBar {
+            height: 20px;
+            width: 100%;
+            background-color: #ccc;
+            margin-bottom: 10px;
+        }
+        #progress {
+            height: 100%;
+            background-color: green;
+            width: 100%;
         }
     </style>
 </head>
@@ -53,18 +60,16 @@
             <option value="1">进位加法</option>
             <option value="2">退位减法</option>
             <option value="3">加减随机</option>
-            <option value="4">连加</option>
-            <option value="5">连减</option>
-            <option value="6">加减混合</option>
-            <option value="7">所有混合</option>
         </select>
         <input type="number" id="difficulty" placeholder="每题时间（秒）" min="1" value="5">
         <input type="number" id="numQuestions" placeholder="题目数量" min="1" value="20">
         <button onclick="startPractice()">开始练习</button>
+        <button onclick="resetPractice()">重置本轮</button>
     </div>
     <div id="practice" style="display: none;">
         <div id="timer"></div>
         <div id="remaining"></div>
+        <div id="progressBar"><div id="progress"></div></div>
         <div id="questionDisplay"></div>
         <input type="number" id="answer" placeholder="请输入答案" inputmode="numeric" pattern="[0-9]*">
     </div>
@@ -73,19 +78,21 @@
 
     <script>
         let currentQuestion, correctAnswer, questionCount, correctCount, wrongQuestions;
-        let startTime, timeLimit, timerInterval;
+        let startTime, timeLimit, timerInterval, progressInterval;
         let allWrongQuestions = JSON.parse(localStorage.getItem('allWrongQuestions')) || [];
-        let totalQuestions;
-        let practiceMode;
+        let totalQuestions, score, practiceMode;
 
         function generateQuestion(type, isWrongQuestion = false) {
             if (isWrongQuestion && allWrongQuestions.length > 0) {
-                const randomIndex = Math.floor(Math.random() * allWrongQuestions.length);
-                const wrongQuestion = allWrongQuestions[randomIndex];
-                return { question: wrongQuestion.question, answer: wrongQuestion.answer };
+                const filteredWrongQuestions = allWrongQuestions.filter(q => q.type === type);
+                if (filteredWrongQuestions.length > 0) {
+                    const randomIndex = Math.floor(Math.random() * filteredWrongQuestions.length);
+                    const wrongQuestion = filteredWrongQuestions[randomIndex];
+                    return { question: wrongQuestion.question, answer: wrongQuestion.answer, type: wrongQuestion.type };
+                }
             }
 
-            let a, b, c, question, answer;
+            let a, b, question, answer;
             switch (parseInt(type)) {
                 case 1: // 进位加法
                     do {
@@ -95,7 +102,7 @@
                     question = `${a} + ${b} = ?`;
                     answer = a + b;
                     break;
-                case 2: // 退位减法（十几减几）
+                case 2: // 退位减法
                     a = Math.floor(Math.random() * 9) + 11; // 11到19之间的数
                     do {
                         b = Math.floor(Math.random() * 9) + 1;
@@ -105,39 +112,12 @@
                     break;
                 case 3: // 加减随机
                     if (Math.random() < 0.5) {
-                        return generateQuestion(1); // 进位加法
+                        return generateQuestion(1);
                     } else {
-                        return generateQuestion(2); // 退位减法
+                        return generateQuestion(2);
                     }
-                case 4: // 连加
-                    do {
-                        a = Math.floor(Math.random() * 9) + 1;
-                        b = Math.floor(Math.random() * 9) + 1;
-                        c = Math.floor(Math.random() * 9) + 1;
-                    } while (a + b + c < 20);
-                    question = `${a} + ${b} + ${c} = ?`;
-                    answer = a + b + c;
-                    break;
-                case 5: // 连减
-                    a = Math.floor(Math.random() * 9) + 11; // 11到19之间的数
-                    do {
-                        b = Math.floor(Math.random() * 9) + 1;
-                        c = Math.floor(Math.random() * 9) + 1;
-                    } while (a - b - c < 1 || a - b - c >= 10);
-                    question = `${a} - ${b} - ${c} = ?`;
-                    answer = a - b - c;
-                    break;
-                case 6: // 加减混合
-                    if (Math.random() < 0.5) {
-                        return generateQuestion(4); // 连加
-                    } else {
-                        return generateQuestion(5); // 连减
-                    }
-                case 7: // 所有混合
-                    const randomType = Math.floor(Math.random() * 5) + 1;
-                    return generateQuestion(randomType);
             }
-            return { question, answer };
+            return { question, answer, type };
         }
 
         function startPractice() {
@@ -147,6 +127,7 @@
             questionCount = parseInt(document.getElementById('numQuestions').value);
             totalQuestions = questionCount;
             correctCount = 0;
+            score = 0;
             wrongQuestions = [];
 
             document.getElementById('setup').style.display = 'none';
@@ -158,10 +139,15 @@
         }
 
         function nextQuestion(isWrongQuestion) {
+            clearInterval(timerInterval);
+            clearInterval(progressInterval);
+
             if (questionCount > 0) {
-                const { question, answer } = generateQuestion(document.getElementById('practiceType').value, isWrongQuestion);
+                const practiceType = document.getElementById('practiceType').value;
+                const { question, answer, type } = generateQuestion(practiceType, isWrongQuestion);
                 currentQuestion = question;
                 correctAnswer = answer;
+                currentType = type;
                 document.getElementById('questionDisplay').textContent = question;
                 document.getElementById('answer').value = '';
                 document.getElementById('answer').focus();
@@ -169,33 +155,55 @@
                 startTime = Date.now();
                 questionCount--;
                 startTimer();
+                startProgressBar();
             } else {
                 endPractice();
             }
         }
 
         function startTimer() {
-            clearInterval(timerInterval);
             const timerDisplay = document.getElementById('timer');
             timerInterval = setInterval(() => {
-                const remainingTime = Math.max(0, Math.ceil((timeLimit - (Date.now() - startTime)) / 1000));
+                const elapsed = Date.now() - startTime;
+                const remainingTime = Math.max(0, Math.ceil((timeLimit - elapsed) / 1000));
                 timerDisplay.textContent = `剩余时间：${remainingTime}秒`;
-                if (remainingTime === 0) {
+                if (remainingTime <= 0) {
                     clearInterval(timerInterval);
                     submitAnswer();
                 }
             }, 100);
         }
 
+        function startProgressBar() {
+            const progressBar = document.getElementById('progress');
+            progressBar.style.width = '100%';
+            const totalWidth = 100;
+            const decrement = totalWidth / (timeLimit / 100);
+            let width = totalWidth;
+            progressInterval = setInterval(() => {
+                width -= decrement;
+                if (width <= 0) {
+                    width = 0;
+                    clearInterval(progressInterval);
+                }
+                progressBar.style.width = `${width}%`;
+            }, 100);
+        }
+
         function submitAnswer() {
             clearInterval(timerInterval);
+            clearInterval(progressInterval);
             const userAnswer = parseInt(document.getElementById('answer').value);
+            const responseTime = (Date.now() - startTime) / 1000;
+            let points = responseTime <= 1 ? 10 : responseTime <= 4 ? 5 : 5;
+
             if (userAnswer === correctAnswer) {
                 correctCount++;
+                score += points;
             } else {
-                wrongQuestions.push({ question: currentQuestion, answer: correctAnswer, userAnswer: isNaN(userAnswer) ? '未作答' : userAnswer });
+                wrongQuestions.push({ question: currentQuestion, type: currentType });
                 if (!allWrongQuestions.some(q => q.question === currentQuestion)) {
-                    allWrongQuestions.push({ question: currentQuestion, answer: correctAnswer });
+                    allWrongQuestions.push({ question: currentQuestion, answer: correctAnswer, type: currentType });
                     localStorage.setItem('allWrongQuestions', JSON.stringify(allWrongQuestions));
                 }
             }
@@ -210,19 +218,21 @@
 
         function endPractice() {
             clearInterval(timerInterval);
+            clearInterval(progressInterval);
             document.getElementById('practice').style.display = 'none';
             document.getElementById('setup').style.display = 'block';
 
             const accuracy = (correctCount / totalQuestions) * 100;
             document.getElementById('result').innerHTML = `
                 <h2>练习结束</h2>
-                <p>正确率: ${accuracy.toFixed(2)}%</p>
+                <p style="font-size: 32px;">总积分: ${score}</p>
+                <p style="font-size: 24px;">正确率: ${accuracy.toFixed(2)}%</p>
             `;
 
             if (wrongQuestions.length > 0) {
                 let wrongQuestionsHtml = '<h3>本次练习错误的题目:</h3><ul>';
                 wrongQuestions.forEach(q => {
-                    wrongQuestionsHtml += `<li>${q.question} 正确答案：${q.answer}，您的答案：${q.userAnswer}</li>`;
+                    wrongQuestionsHtml += `<li>${q.question}</li>`;
                 });
                 wrongQuestionsHtml += '</ul>';
                 document.getElementById('wrongQuestions').innerHTML = wrongQuestionsHtml;
@@ -230,14 +240,25 @@
                 document.getElementById('wrongQuestions').innerHTML = '<p>本次练习全对，做得不错！</p>';
             }
 
+            // 添加清空错题库的按钮
             if (allWrongQuestions.length > 0) {
-                let allWrongQuestionsHtml = '<h3>累计错题:</h3><ul>';
-                allWrongQuestions.forEach(q => {
-                    allWrongQuestionsHtml += `<li>${q.question} 正确答案：${q.answer}</li>`;
-                });
-                allWrongQuestionsHtml += '</ul>';
-                document.getElementById('wrongQuestions').innerHTML += allWrongQuestionsHtml;
+                document.getElementById('wrongQuestions').innerHTML += `
+                    <button onclick="clearWrongQuestions()">清空当前题型的错题库</button>
+                `;
             }
+        }
+
+        function resetPractice() {
+            // 不记录本轮错题，重新开始练习
+            wrongQuestions = [];
+            startPractice();
+        }
+
+        function clearWrongQuestions() {
+            const practiceType = document.getElementById('practiceType').value;
+            allWrongQuestions = allWrongQuestions.filter(q => q.type !== practiceType);
+            localStorage.setItem('allWrongQuestions', JSON.stringify(allWrongQuestions));
+            alert('已清空当前题型的错题库');
         }
     </script>
 </body>
