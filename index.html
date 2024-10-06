@@ -462,7 +462,7 @@
             if (wrongQuestions.length > 0) {
                 let wrongQuestionsHtml = '<h3>本次练习错误的题目:</h3><ul>';
                 wrongQuestions.forEach(q => {
-                    wrongQuestionsHtml += `<li>${q.question}</li>`;
+                    wrongQuestionsHtml += `<li>${q.question.replace('= ?', '=')}</li>`;
                 });
                 wrongQuestionsHtml += '</ul>';
                 document.getElementById('resultContainer').innerHTML += wrongQuestionsHtml;
@@ -520,7 +520,7 @@
                 } else {
                     containerHtml += '<ul>';
                     filteredMistakes.forEach(q => {
-                        containerHtml += `<li>${q.question}</li>`;
+                        containerHtml += `<li>${q.question.replace('= ?', '=')}</li>`;
                     });
                     containerHtml += '</ul>';
                     containerHtml += `<button onclick="startMistakePractice('${t.type}')">开始错题练习</button>`;
