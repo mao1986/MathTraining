@@ -12,7 +12,7 @@
             padding: 20px;
             text-align: center;
         }
-        select, input, button {
+        select, input, button, textarea {
             font-size: 16px;
             margin: 10px;
             padding: 5px;
@@ -47,6 +47,18 @@
             background-color: green;
             width: 100%;
         }
+        #pauseButton {
+            margin: 10px;
+            padding: 5px 10px;
+        }
+        #customQuestionsContainer {
+            display: none;
+            margin-top: 20px;
+        }
+        #customQuestions {
+            width: 100%;
+            height: 150px;
+        }
     </style>
 </head>
 <body>
@@ -55,6 +67,7 @@
         <select id="practiceMode">
             <option value="regular">常规练习</option>
             <option value="wrong">错题练习</option>
+            <option value="custom">自定义练习</option>
         </select>
         <select id="practiceType">
             <option value="1">进位加法</option>
@@ -65,6 +78,10 @@
         <input type="number" id="numQuestions" placeholder="题目数量" min="1" value="20">
         <button onclick="startPractice()">开始练习</button>
         <button onclick="resetPractice()">重置本轮</button>
+        <div id="customQuestionsContainer">
+            <h3>输入自定义题目（每行一题，格式如：13 - 6 =）</h3>
+            <textarea id="customQuestions"></textarea>
+        </div>
     </div>
     <div id="practice" style="display: none;">
         <div id="timer"></div>
@@ -72,6 +89,9 @@
         <div id="progressBar"><div id="progress"></div></div>
         <div id="questionDisplay"></div>
         <input type="number" id="answer" placeholder="请输入答案" inputmode="numeric" pattern="[0-9]*">
+        <div>
+            <button id="pauseButton" onclick="togglePause()">暂停</button>
+        </div>
     </div>
     <div id="result"></div>
     <div id="wrongQuestions"></div>
@@ -80,7 +100,21 @@
         let currentQuestion, correctAnswer, questionCount, correctCount, wrongQuestions;
         let startTime, timeLimit, timerInterval, progressInterval;
         let allWrongQuestions = JSON.parse(localStorage.getItem('allWrongQuestions')) || [];
-        let totalQuestions, score, practiceMode;
+        let totalQuestions, score, practiceMode, isPaused = false;
+        let questionSet = new Set();
+        let pausedTime;
+
+        document.getElementById('practiceMode').addEventListener('change', function() {
+            if (this.value === 'custom') {
+                document.getElementById('customQuestionsContainer').style.display = 'block';
+                document.getElementById('practiceType').style.display = 'none';
+                document.getElementById('numQuestions').style.display = 'none';
+            } else {
+                document.getElementById('customQuestionsContainer').style.display = 'none';
+                document.getElementById('practiceType').style.display = 'inline';
+                document.getElementById('numQuestions').style.display = 'inline';
+            }
+        });
 
         function generateQuestion(type, isWrongQuestion = false) {
             if (isWrongQuestion && allWrongQuestions.length > 0) {
@@ -93,29 +127,38 @@
             }
 
             let a, b, question, answer;
-            switch (parseInt(type)) {
-                case 1: // 进位加法
-                    do {
-                        a = Math.floor(Math.random() * 9) + 1;
-                        b = Math.floor(Math.random() * 9) + 1;
-                    } while (a + b < 10);
-                    question = `${a} + ${b} = ?`;
-                    answer = a + b;
+            let maxAttempts = 100;
+            while (maxAttempts > 0) {
+                switch (parseInt(type)) {
+                    case 1: // 进位加法
+                        do {
+                            a = Math.floor(Math.random() * 9) + 1;
+                            b = Math.floor(Math.random() * 9) + 1;
+                        } while (a + b < 11 || a + b === 10 || questionSet.has(`${a} + ${b} = ?`));
+                        question = `${a} + ${b} = ?`;
+                        answer = a + b;
+                        break;
+                    case 2: // 退位减法
+                        a = Math.floor(Math.random() * 9) + 11; // 11到19之间的数
+                        do {
+                            b = Math.floor(Math.random() * 9) + 1;
+                        } while (a - b >= 10 || a - b === 10 || questionSet.has(`${a} - ${b} = ?`));
+                        question = `${a} - ${b} = ?`;
+                        answer = a - b;
+                        break;
+                    case 3: // 加减随机
+                        if (Math.random() < 0.5) {
+                            ({ question, answer } = generateQuestion(1));
+                        } else {
+                            ({ question, answer } = generateQuestion(2));
+                        }
+                        break;
+                }
+                if (!questionSet.has(question)) {
+                    questionSet.add(question);
                     break;
-                case 2: // 退位减法
-                    a = Math.floor(Math.random() * 9) + 11; // 11到19之间的数
-                    do {
-                        b = Math.floor(Math.random() * 9) + 1;
-                    } while (a - b >= 10);
-                    question = `${a} - ${b} = ?`;
-                    answer = a - b;
-                    break;
-                case 3: // 加减随机
-                    if (Math.random() < 0.5) {
-                        return generateQuestion(1);
-                    } else {
-                        return generateQuestion(2);
-                    }
+                }
+                maxAttempts--;
             }
             return { question, answer, type };
         }
@@ -129,13 +172,47 @@
             correctCount = 0;
             score = 0;
             wrongQuestions = [];
+            questionSet.clear();
+            isPaused = false;
+            document.getElementById('pauseButton').textContent = '暂停';
 
             document.getElementById('setup').style.display = 'none';
             document.getElementById('practice').style.display = 'block';
             document.getElementById('result').innerHTML = '';
             document.getElementById('wrongQuestions').innerHTML = '';
 
-            nextQuestion(practiceMode === 'wrong');
+            if (practiceMode === 'custom') {
+                const customQuestionsText = document.getElementById('customQuestions').value.trim();
+                if (!customQuestionsText) {
+                    alert('请输入自定义题目！');
+                    resetPractice();
+                    return;
+                }
+                customQuestions = customQuestionsText.split('\n').map(line => {
+                    line = line.trim();
+                    if (line.endsWith('=')) {
+                        line = line.slice(0, -1).trim();
+                    }
+                    const [operands, operator] = line.split(' ');
+                    const [a, b] = operands.split(operator).map(Number);
+                    let answer;
+                    if (operator === '+') {
+                        answer = a + b;
+                    } else if (operator === '-') {
+                        answer = a - b;
+                    } else {
+                        alert('题目格式错误，请检查！');
+                        resetPractice();
+                        return;
+                    }
+                    return { question: `${a} ${operator} ${b} = ?`, answer };
+                }).filter(q => q);
+                totalQuestions = customQuestions.length;
+                questionCount = totalQuestions;
+                nextCustomQuestion();
+            } else {
+                nextQuestion(practiceMode === 'wrong');
+            }
         }
 
         function nextQuestion(isWrongQuestion) {
@@ -161,15 +238,38 @@
             }
         }
 
+        function nextCustomQuestion() {
+            clearInterval(timerInterval);
+            clearInterval(progressInterval);
+
+            if (questionCount > 0) {
+                const current = customQuestions[totalQuestions - questionCount];
+                currentQuestion = current.question;
+                correctAnswer = current.answer;
+                document.getElementById('questionDisplay').textContent = currentQuestion;
+                document.getElementById('answer').value = '';
+                document.getElementById('answer').focus();
+                document.getElementById('remaining').textContent = `剩余题目：${questionCount} / ${totalQuestions}`;
+                startTime = Date.now();
+                questionCount--;
+                startTimer();
+                startProgressBar();
+            } else {
+                endPractice();
+            }
+        }
+
         function startTimer() {
             const timerDisplay = document.getElementById('timer');
             timerInterval = setInterval(() => {
-                const elapsed = Date.now() - startTime;
-                const remainingTime = Math.max(0, Math.ceil((timeLimit - elapsed) / 1000));
-                timerDisplay.textContent = `剩余时间：${remainingTime}秒`;
-                if (remainingTime <= 0) {
-                    clearInterval(timerInterval);
-                    submitAnswer();
+                if (!isPaused) {
+                    const elapsed = Date.now() - startTime;
+                    const remainingTime = Math.max(0, Math.ceil((timeLimit - elapsed) / 1000));
+                    timerDisplay.textContent = `剩余时间：${remainingTime}秒`;
+                    if (remainingTime <= 0) {
+                        clearInterval(timerInterval);
+                        submitAnswer();
+                    }
                 }
             }, 100);
         }
@@ -181,12 +281,14 @@
             const decrement = totalWidth / (timeLimit / 100);
             let width = totalWidth;
             progressInterval = setInterval(() => {
-                width -= decrement;
-                if (width <= 0) {
-                    width = 0;
-                    clearInterval(progressInterval);
+                if (!isPaused) {
+                    width -= decrement;
+                    if (width <= 0) {
+                        width = 0;
+                        clearInterval(progressInterval);
+                    }
+                    progressBar.style.width = `${width}%`;
                 }
-                progressBar.style.width = `${width}%`;
             }, 100);
         }
 
@@ -207,7 +309,12 @@
                     localStorage.setItem('allWrongQuestions', JSON.stringify(allWrongQuestions));
                 }
             }
-            nextQuestion(practiceMode === 'wrong');
+
+            if (practiceMode === 'custom') {
+                nextCustomQuestion();
+            } else {
+                nextQuestion(practiceMode === 'wrong');
+            }
         }
 
         document.getElementById('answer').addEventListener('keyup', function(event) {
@@ -232,7 +339,7 @@
             if (wrongQuestions.length > 0) {
                 let wrongQuestionsHtml = '<h3>本次练习错误的题目:</h3><ul>';
                 wrongQuestions.forEach(q => {
-                    wrongQuestionsHtml += `<li>${q.question}</li>`;
+                    wrongQuestionsHtml += `<li>${q.question.replace('= ?', '')}</li>`;
                 });
                 wrongQuestionsHtml += '</ul>';
                 document.getElementById('wrongQuestions').innerHTML = wrongQuestionsHtml;
@@ -241,7 +348,7 @@
             }
 
             // 添加清空错题库的按钮
-            if (allWrongQuestions.length > 0) {
+            if (allWrongQuestions.length > 0 && practiceMode !== 'custom') {
                 document.getElementById('wrongQuestions').innerHTML += `
                     <button onclick="clearWrongQuestions()">清空当前题型的错题库</button>
                 `;
@@ -251,7 +358,11 @@
         function resetPractice() {
             // 不记录本轮错题，重新开始练习
             wrongQuestions = [];
-            startPractice();
+            questionSet.clear();
+            clearInterval(timerInterval);
+            clearInterval(progressInterval);
+            document.getElementById('practice').style.display = 'none';
+            document.getElementById('setup').style.display = 'block';
         }
 
         function clearWrongQuestions() {
@@ -259,6 +370,19 @@
             allWrongQuestions = allWrongQuestions.filter(q => q.type !== practiceType);
             localStorage.setItem('allWrongQuestions', JSON.stringify(allWrongQuestions));
             alert('已清空当前题型的错题库');
+        }
+
+        function togglePause() {
+            if (!isPaused) {
+                isPaused = true;
+                pausedTime = Date.now();
+                document.getElementById('pauseButton').textContent = '恢复';
+            } else {
+                isPaused = false;
+                // 调整开始时间以补偿暂停的时间
+                startTime += Date.now() - pausedTime;
+                document.getElementById('pauseButton').textContent = '暂停';
+            }
         }
     </script>
 </body>
