@@ -21,7 +21,7 @@
             font-size: 24px;
             margin: 20px 0;
         }
-        #result, #wrongQuestions {
+        #result, #wrongQuestions, #mistakeListDisplay {
             margin-top: 20px;
             text-align: left;
         }
@@ -59,6 +59,10 @@
             width: 100%;
             height: 150px;
         }
+        #mistakeTypeContainer {
+            display: none;
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
@@ -68,6 +72,7 @@
             <option value="regular">常规练习</option>
             <option value="wrong">错题练习</option>
             <option value="custom">自定义练习</option>
+            <option value="mistakeList">错题清单</option>
         </select>
         <select id="practiceType">
             <option value="1">进位加法</option>
@@ -82,6 +87,16 @@
             <h3>输入自定义题目（每行一题，格式如：13 - 6 =）</h3>
             <textarea id="customQuestions"></textarea>
         </div>
+        <div id="mistakeTypeContainer">
+            <h3>选择要查看的错题类型：</h3>
+            <select id="mistakeTypeSelect">
+                <option value="all">全部错题</option>
+                <option value="1">进位加法</option>
+                <option value="2">退位减法</option>
+                <option value="3">加减随机</option>
+            </select>
+            <button onclick="showMistakeList()">查看错题清单</button>
+        </div>
     </div>
     <div id="practice" style="display: none;">
         <div id="timer"></div>
@@ -95,6 +110,7 @@
     </div>
     <div id="result"></div>
     <div id="wrongQuestions"></div>
+    <div id="mistakeListDisplay"></div>
 
     <script>
         let currentQuestion, correctAnswer, questionCount, correctCount, wrongQuestions;
@@ -103,16 +119,27 @@
         let totalQuestions, score, practiceMode, isPaused = false;
         let questionSet = new Set();
         let pausedTime;
+        let highestScore = parseInt(localStorage.getItem('highestScore')) || 0;
 
         document.getElementById('practiceMode').addEventListener('change', function() {
-            if (this.value === 'custom') {
+            const mode = this.value;
+            if (mode === 'custom') {
                 document.getElementById('customQuestionsContainer').style.display = 'block';
                 document.getElementById('practiceType').style.display = 'none';
                 document.getElementById('numQuestions').style.display = 'none';
+                document.getElementById('mistakeTypeContainer').style.display = 'none';
+            } else if (mode === 'mistakeList') {
+                document.getElementById('mistakeTypeContainer').style.display = 'block';
+                document.getElementById('customQuestionsContainer').style.display = 'none';
+                document.getElementById('practiceType').style.display = 'none';
+                document.getElementById('numQuestions').style.display = 'none';
+                document.getElementById('difficulty').style.display = 'none';
             } else {
                 document.getElementById('customQuestionsContainer').style.display = 'none';
+                document.getElementById('mistakeTypeContainer').style.display = 'none';
                 document.getElementById('practiceType').style.display = 'inline';
                 document.getElementById('numQuestions').style.display = 'inline';
+                document.getElementById('difficulty').style.display = 'inline';
             }
         });
 
@@ -180,6 +207,7 @@
             document.getElementById('practice').style.display = 'block';
             document.getElementById('result').innerHTML = '';
             document.getElementById('wrongQuestions').innerHTML = '';
+            document.getElementById('mistakeListDisplay').innerHTML = '';
 
             if (practiceMode === 'custom') {
                 const customQuestionsText = document.getElementById('customQuestions').value.trim();
@@ -193,23 +221,33 @@
                     if (line.endsWith('=')) {
                         line = line.slice(0, -1).trim();
                     }
-                    const [operands, operator] = line.split(' ');
-                    const [a, b] = operands.split(operator).map(Number);
+                    const operator = line.includes('+') ? '+' : line.includes('-') ? '-' : null;
+                    if (!operator) {
+                        alert('题目格式错误，请检查！');
+                        resetPractice();
+                        return;
+                    }
+                    const [aStr, bStr] = line.split(operator).map(s => s.trim());
+                    const a = parseInt(aStr);
+                    const b = parseInt(bStr);
+                    if (isNaN(a) || isNaN(b)) {
+                        alert('题目格式错误，请检查！');
+                        resetPractice();
+                        return;
+                    }
                     let answer;
                     if (operator === '+') {
                         answer = a + b;
                     } else if (operator === '-') {
                         answer = a - b;
-                    } else {
-                        alert('题目格式错误，请检查！');
-                        resetPractice();
-                        return;
                     }
                     return { question: `${a} ${operator} ${b} = ?`, answer };
                 }).filter(q => q);
                 totalQuestions = customQuestions.length;
                 questionCount = totalQuestions;
                 nextCustomQuestion();
+            } else if (practiceMode === 'mistakeList') {
+                showMistakeList();
             } else {
                 nextQuestion(practiceMode === 'wrong');
             }
@@ -297,7 +335,18 @@
             clearInterval(progressInterval);
             const userAnswer = parseInt(document.getElementById('answer').value);
             const responseTime = (Date.now() - startTime) / 1000;
-            let points = responseTime <= 1 ? 10 : responseTime <= 4 ? 5 : 5;
+            let points;
+            if (responseTime <= 1) {
+                points = 10;
+            } else if (responseTime <= 2) {
+                points = 8;
+            } else if (responseTime <= 3) {
+                points = 7;
+            } else if (responseTime <= 4) {
+                points = 6;
+            } else {
+                points = 5;
+            }
 
             if (userAnswer === correctAnswer) {
                 correctCount++;
@@ -330,9 +379,16 @@
             document.getElementById('setup').style.display = 'block';
 
             const accuracy = (correctCount / totalQuestions) * 100;
+
+            if (score > highestScore) {
+                highestScore = score;
+                localStorage.setItem('highestScore', highestScore);
+            }
+
             document.getElementById('result').innerHTML = `
                 <h2>练习结束</h2>
                 <p style="font-size: 32px;">总积分: ${score}</p>
+                <p style="font-size: 24px;">最高记录: ${highestScore}</p>
                 <p style="font-size: 24px;">正确率: ${accuracy.toFixed(2)}%</p>
             `;
 
@@ -382,6 +438,27 @@
                 // 调整开始时间以补偿暂停的时间
                 startTime += Date.now() - pausedTime;
                 document.getElementById('pauseButton').textContent = '暂停';
+            }
+        }
+
+        function showMistakeList() {
+            const mistakeType = document.getElementById('mistakeTypeSelect').value;
+            let filteredMistakes;
+            if (mistakeType === 'all') {
+                filteredMistakes = allWrongQuestions;
+            } else {
+                filteredMistakes = allWrongQuestions.filter(q => q.type == mistakeType);
+            }
+
+            if (filteredMistakes.length === 0) {
+                document.getElementById('mistakeListDisplay').innerHTML = '<p>没有对应的错题。</p>';
+            } else {
+                let listHtml = '<h3>错题清单:</h3><ul>';
+                filteredMistakes.forEach(q => {
+                    listHtml += `<li>${q.question.replace('= ?', '')}</li>`;
+                });
+                listHtml += '</ul>';
+                document.getElementById('mistakeListDisplay').innerHTML = listHtml;
             }
         }
     </script>
