@@ -330,7 +330,7 @@
                             question = `${a} + ${b} =`;
                             answer = a + b;
                             questionSet.add(`${a} + ${b}`);
-                            return { question, answer };
+                            return { question, answer, type };
                         }
                         break;
                     case 2:
@@ -340,7 +340,7 @@
                             question = `${a} - ${b} =`;
                             answer = a - b;
                             questionSet.add(`${a} - ${b}`);
-                            return { question, answer };
+                            return { question, answer, type };
                         }
                         break;
                     case 3:
@@ -353,7 +353,7 @@
                 }
                 maxAttempts--;
             }
-            return { question: '暂无题目', answer: 0 };
+            return { question: '暂无题目', answer: 0, type };
         }
 
         // 更新显示
@@ -407,256 +407,4 @@
         });
 
         answerInput.addEventListener('keydown', function(event) {
-            if (event.key === ' ') {
-                event.preventDefault(); // 阻止空格输入到输入框中
-            }
-        });
-
-        function submitAnswer() {
-            clearTimers();
-            const userAnswer = parseInt(document.getElementById('answer').value);
-            const responseTime = (Date.now() - startTime) / 1000;
-            let points;
-            if (responseTime <= 1) {
-                points = 10;
-            } else if (responseTime <= 2) {
-                points = 8;
-            } else if (responseTime <= 3) {
-                points = 7;
-            } else if (responseTime <= 4) {
-                points = 6;
-            } else {
-                points = 5;
-            }
-
-            if (userAnswer === correctAnswer) {
-                correctCount++;
-                score += points;
-            } else {
-                wrongQuestions.push({ question: currentQuestion, answer: correctAnswer });
-                if (!allWrongQuestions.some(q => q.question === currentQuestion)) {
-                    allWrongQuestions.push({ question: currentQuestion, answer: correctAnswer });
-                    localStorage.setItem('allWrongQuestions', JSON.stringify(allWrongQuestions));
-                }
-            }
-
-            nextQuestion();
-        }
-
-        // 结束练习
-        function endPractice() {
-            clearTimers();
-            document.getElementById('practiceContainer').style.display = 'none';
-            document.getElementById('resultContainer').style.display = 'block';
-
-            const accuracy = (correctCount / totalQuestions) * 100;
-
-            if (score > highestScore) {
-                highestScore = score;
-                localStorage.setItem('highestScore', highestScore);
-            }
-
-            document.getElementById('resultContainer').innerHTML = `
-                <h2>练习结束</h2>
-                <p style="font-size: 32px;">总积分: ${score}</p>
-                <p style="font-size: 24px;">最高记录: ${highestScore}</p>
-                <p style="font-size: 24px;">正确率: ${accuracy.toFixed(2)}%</p>
-            `;
-
-            if (wrongQuestions.length > 0) {
-                let wrongQuestionsHtml = '<h3>本次练习错误的题目:</h3><ul>';
-                wrongQuestions.forEach(q => {
-                    wrongQuestionsHtml += `<li>${q.question.replace('= ?', '=')}</li>`;
-                });
-                wrongQuestionsHtml += '</ul>';
-                document.getElementById('resultContainer').innerHTML += wrongQuestionsHtml;
-            } else {
-                document.getElementById('resultContainer').innerHTML += '<p>本次练习全对，做得不错！</p>';
-            }
-        }
-
-        // 重新开始练习
-        function restartPractice() {
-            clearTimers();
-            resetVariables();
-            if (practiceMode === 'custom') {
-                currentCustomIndex = 0;
-                questionCount = totalQuestions;
-            } else {
-                questionCount = totalQuestions;
-            }
-            nextQuestion();
-        }
-
-        // 退出练习
-        function exitPractice() {
-            clearTimers();
-            resetVariables();
-            document.getElementById('practiceContainer').style.display = 'none';
-            document.getElementById('resultContainer').innerHTML = '';
-            showSection('settings');
-        }
-
-        // 显示错题清单
-        function showMistakeList() {
-            clearTimers();
-            resetVariables();
-            document.getElementById('settingsContainer').style.display = 'none';
-            document.getElementById('customQuestionsContainer').style.display = 'none';
-            document.getElementById('practiceContainer').style.display = 'none';
-            document.getElementById('resultContainer').innerHTML = '';
-            document.getElementById('mistakeListContainer').style.display = 'block';
-
-            const types = [
-                { type: '1', name: '进位加法' },
-                { type: '2', name: '退位减法' },
-                { type: '3', name: '加减随机' },
-                { type: 'all', name: '全部错题' }
-            ];
-
-            let containerHtml = '';
-            types.forEach(t => {
-                let filteredMistakes = t.type === 'all' ? allWrongQuestions : allWrongQuestions.filter(q => q.type == t.type);
-                containerHtml += `<div class="mistake-column">
-                    <h3>${t.name}</h3>`;
-                if (filteredMistakes.length === 0) {
-                    containerHtml += '<p>没有错题。</p>';
-                } else {
-                    containerHtml += '<ul>';
-                    filteredMistakes.forEach((q, index) => {
-                        containerHtml += `<li>${q.question.replace('= ?', '=')}</li>`;
-                    });
-                    containerHtml += '</ul>';
-                    containerHtml += `<button onclick="startMistakePractice('${t.type}')">开始错题练习</button>`;
-                    containerHtml += `<button onclick="editWrongQuestions('${t.type}')">编辑错题</button>`;
-                    containerHtml += `<button onclick="clearWrongQuestions('${t.type}')">清空错题</button>`;
-                }
-                containerHtml += '</div>';
-            });
-            document.getElementById('mistakeListContainer').innerHTML = containerHtml;
-        }
-
-        // 开始错题练习
-        function startMistakePractice(type) {
-            clearTimers();
-            resetVariables();
-            practiceMode = 'wrong';
-            if (type !== 'all') {
-                allWrongQuestions = allWrongQuestions.filter(q => q.type == type);
-            }
-            questionCount = allWrongQuestions.length;
-            totalQuestions = questionCount;
-            if (questionCount === 0) {
-                alert('没有错题可练习！');
-                return;
-            }
-            document.getElementById('mistakeListContainer').style.display = 'none';
-            document.getElementById('practiceContainer').style.display = 'block';
-            nextQuestion();
-        }
-
-        // 清空错题
-        function clearWrongQuestions(type) {
-            if (type === 'all') {
-                allWrongQuestions = [];
-            } else {
-                allWrongQuestions = allWrongQuestions.filter(q => q.type != type);
-            }
-            localStorage.setItem('allWrongQuestions', JSON.stringify(allWrongQuestions));
-            showMistakeList();
-            alert('已清空该类型的错题！');
-        }
-
-        // 编辑错题
-        function editWrongQuestions(type) {
-            const filteredMistakes = type === 'all' ? allWrongQuestions : allWrongQuestions.filter(q => q.type == type);
-            let editHtml = `<textarea id="editWrongQuestionsTextarea" style="width: 100%; height: 200px;">`;
-            filteredMistakes.forEach(q => {
-                editHtml += `${q.question} = ${q.answer}\n`;
-            });
-            editHtml += `</textarea>
-            <button onclick="saveEditedWrongQuestions('${type}')">保存</button>
-            <button onclick="cancelEditWrongQuestions()">取消</button>`;
-            document.getElementById('mistakeListContainer').innerHTML = editHtml;
-        }
-
-        // 保存编辑后的错题
-        function saveEditedWrongQuestions(type) {
-            const editedText = document.getElementById('editWrongQuestionsTextarea').value.trim();
-            const editedLines = editedText.split('\n');
-            const updatedQuestions = [];
-            editedLines.forEach(line => {
-                const [questionPart, answerPart] = line.split('=');
-                if (questionPart && answerPart) {
-                    const question = questionPart.trim();
-                    const answer = parseInt(answerPart.trim());
-                    if (!isNaN(answer)) {
-                        updatedQuestions.push({ question, answer, type });
-                    }
-                }
-            });
-            if (type === 'all') {
-                allWrongQuestions = updatedQuestions;
-            } else {
-                allWrongQuestions = allWrongQuestions.filter(q => q.type != type).concat(updatedQuestions);
-            }
-            localStorage.setItem('allWrongQuestions', JSON.stringify(allWrongQuestions));
-            showMistakeList();
-        }
-
-        // 取消编辑错题
-        function cancelEditWrongQuestions() {
-            showMistakeList();
-        }
-
-        // 暂停/恢复练习
-        function togglePause() {
-            if (!isPaused) {
-                isPaused = true;
-                document.getElementById('pauseButton').textContent = '恢复';
-            } else {
-                isPaused = false;
-                startTime += Date.now() - (startTime + timeLimit - Date.now());
-                document.getElementById('pauseButton').textContent = '暂停';
-            }
-        }
-
-        // 清除计时器
-        function clearTimers() {
-            if (timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
-            }
-            if (progressInterval) {
-                clearInterval(progressInterval);
-                progressInterval = null;
-            }
-        }
-
-        // 重置变量
-        function resetVariables() {
-            currentQuestion = '';
-            correctAnswer = 0;
-            questionCount = 0;
-            correctCount = 0;
-            wrongQuestions = [];
-            totalQuestions = 0;
-            score = 0;
-            isPaused = false;
-            startTime = 0;
-            timeLimit = 0;
-            questionSet.clear();
-            customQuestions = [];
-            currentCustomIndex = 0;
-        }
-
-        // 获取随机整数
-        function getRandomInt(min, max) {
-            return Math.floor(Math.random() * (max - min + 1)) + min;
-        }
-
-        // 初始化
-        showSection('settings');
-    </script>
-</body>
-</html>
+            if (event.key
