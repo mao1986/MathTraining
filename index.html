@@ -60,16 +60,14 @@
             width: 200px;
             text-align: center;
             margin-left: 10px;
+            -webkit-text-security: none; /* 防止显示密码提示 */
+            autocomplete: off; /* 禁用自动填充提示 */
         }
         #progressBar {
-            height: 20px;
-            width: 100%;
+            height: 10px;
+            width: 60%;
             background-color: #ccc;
-            margin-bottom: 10px;
-            position: fixed;
-            top: 0;
-            left: 0;
-            z-index: 1000;
+            margin-top: 20px;
         }
         #progress {
             height: 100%;
@@ -80,6 +78,8 @@
             margin: 5px;
             padding: 10px 20px;
             font-size: 16px;
+            display: block;
+            margin-bottom: 10px;
         }
         #customQuestionsContainer, #settingsContainer, #mistakeListContainer {
             display: none;
@@ -99,13 +99,16 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            height: calc(100vh - 160px);
+            justify-content: flex-start;
+            margin-top: 20px;
+            height: auto;
         }
         #questionInputContainer {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
+            margin-top: 20px;
         }
         /* 响应式处理 */
         @media (max-width: 600px) {
@@ -116,6 +119,30 @@
             body {
                 flex-direction: column;
             }
+        }
+        .input-container {
+            position: relative;
+            display: inline-block;
+        }
+        .circular-progress {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 40px;
+            height: 40px;
+        }
+        .progress-ring__circle {
+            transition: 0.35s stroke-dashoffset;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+        .countdown-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 12px;
         }
     </style>
 </head>
@@ -153,13 +180,25 @@
 
         <!-- 练习区域 -->
         <div id="practiceContainer" style="display: none;">
-            <div id="timer"></div>
-            <div id="remaining"></div>
-            <div id="progressBar"><div id="progress"></div></div>
             <div id="practiceArea">
                 <div id="questionInputContainer">
                     <div id="questionDisplay"></div>
-                    <input type="number" id="answer" placeholder="" inputmode="numeric" pattern="[0-9]*">
+                    <div class="input-container">
+                        <input type="number" id="answer" placeholder="" inputmode="numeric" pattern="[0-9]*">
+                        <div class="circular-progress">
+                            <svg class="progress-ring" width="40" height="40">
+                                <defs>
+                                    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                        <stop offset="0%" stop-color="#ff6666" />
+                                        <stop offset="100%" stop-color="#66ff66" />
+                                    </linearGradient>
+                                </defs>
+                                <circle class="progress-ring__circle" stroke="url(#gradient)" stroke-width="4" fill="transparent" r="16" cx="20" cy="20"/>
+                            </svg>
+                            <span class="countdown-text"></span>
+                        </div>
+                    </div>
+                    <div id="progressBar"><div id="progress"></div></div>
                 </div>
                 <div id="practiceButtons">
                     <button id="pauseButton" onclick="togglePause()">暂停</button>
@@ -281,7 +320,7 @@
                 } else if (operator === '-') {
                     answer = a - b;
                 }
-                questions.push({ question: `${a} ${operator} ${b} =`, answer });
+                questions.push({ question: `${a} ${operator} ${b}`, answer });
             });
             return questions;
         }
@@ -327,7 +366,7 @@
                         a = getRandomInt(1, 9);
                         b = getRandomInt(1, 9);
                         if (a + b >= 11 && a + b !== 10 && !questionSet.has(`${a} + ${b}`)) {
-                            question = `${a} + ${b} =`;
+                            question = `${a} + ${b}`;
                             answer = a + b;
                             questionSet.add(`${a} + ${b}`);
                             return { question, answer };
@@ -337,7 +376,7 @@
                         a = getRandomInt(11, 19);
                         b = getRandomInt(1, 9);
                         if (a - b < 10 && a - b !== 10 && !questionSet.has(`${a} - ${b}`)) {
-                            question = `${a} - ${b} =`;
+                            question = `${a} - ${b}`;
                             answer = a - b;
                             questionSet.add(`${a} - ${b}`);
                             return { question, answer };
@@ -361,17 +400,14 @@
             document.getElementById('questionDisplay').textContent = currentQuestion;
             document.getElementById('answer').value = '';
             document.getElementById('answer').focus();
-            document.getElementById('remaining').textContent = `剩余题目：${totalQuestions - questionCount} / ${totalQuestions}`;
         }
 
         // 开始计时器
         function startTimer() {
-            const timerDisplay = document.getElementById('timer');
             timerInterval = setInterval(() => {
                 if (!isPaused) {
                     const elapsed = Date.now() - startTime;
                     const remainingTime = Math.max(0, Math.ceil((timeLimit - elapsed) / 1000));
-                    timerDisplay.textContent = `剩余时间：${remainingTime}秒`;
                     if (remainingTime <= 0) {
                         submitAnswer();
                     }
@@ -433,9 +469,9 @@
                 correctCount++;
                 score += points;
             } else {
-                wrongQuestions.push({ question: currentQuestion, answer: correctAnswer });
+                wrongQuestions.push({ question: currentQuestion, answer: correctAnswer, type: currentPracticeType });
                 if (!allWrongQuestions.some(q => q.question === currentQuestion)) {
-                    allWrongQuestions.push({ question: currentQuestion, answer: correctAnswer });
+                    allWrongQuestions.push({ question: currentQuestion, answer: correctAnswer, type: currentPracticeType });
                     localStorage.setItem('allWrongQuestions', JSON.stringify(allWrongQuestions));
                 }
             }
@@ -466,7 +502,7 @@
             if (wrongQuestions.length > 0) {
                 let wrongQuestionsHtml = '<h3>本次练习错误的题目:</h3><ul>';
                 wrongQuestions.forEach(q => {
-                    wrongQuestionsHtml += `<li>${q.question.replace('= ?', '=')}</li>`;
+                    wrongQuestionsHtml += `<li>${q.question}</li>`;
                 });
                 wrongQuestionsHtml += '</ul>';
                 document.getElementById('resultContainer').innerHTML += wrongQuestionsHtml;
@@ -524,7 +560,7 @@
                 } else {
                     containerHtml += '<ul>';
                     filteredMistakes.forEach((q, index) => {
-                        containerHtml += `<li>${q.question.replace('= ?', '=')}</li>`;
+                        containerHtml += `<li>${q.question}</li>`;
                     });
                     containerHtml += '</ul>';
                     containerHtml += `<button onclick="startMistakePractice('${t.type}')">开始错题练习</button>`;
@@ -567,12 +603,12 @@
             alert('已清空该类型的错题！');
         }
 
-        // 编辑错题
+        // 辑错题
         function editWrongQuestions(type) {
             const filteredMistakes = type === 'all' ? allWrongQuestions : allWrongQuestions.filter(q => q.type == type);
             let editHtml = `<textarea id="editWrongQuestionsTextarea" style="width: 100%; height: 200px;">`;
             filteredMistakes.forEach(q => {
-                editHtml += `${q.question} = ${q.answer}\n`;
+                editHtml += `${q.question}\n`;
             });
             editHtml += `</textarea>
             <button onclick="saveEditedWrongQuestions('${type}')">保存</button>
@@ -586,13 +622,9 @@
             const editedLines = editedText.split('\n');
             const updatedQuestions = [];
             editedLines.forEach(line => {
-                const [questionPart, answerPart] = line.split('=');
-                if (questionPart && answerPart) {
-                    const question = questionPart.trim();
-                    const answer = parseInt(answerPart.trim());
-                    if (!isNaN(answer)) {
-                        updatedQuestions.push({ question, answer, type });
-                    }
+                const question = line.trim();
+                if (question) {
+                    updatedQuestions.push({ question, answer: null, type });
                 }
             });
             if (type === 'all') {
@@ -657,6 +689,38 @@
 
         // 初始化
         showSection('settings');
+
+        function updateProgress(timeLeft, totalTime) {
+            const circle = document.querySelector('.progress-ring__circle');
+            const radius = circle.r.baseVal.value;
+            const circumference = radius * 2 * Math.PI;
+            
+            circle.style.strokeDasharray = `${circumference} ${circumference}`;
+            
+            const offset = circumference - (timeLeft / totalTime) * circumference;
+            circle.style.strokeDashoffset = offset;
+
+            // 更新文本
+            document.querySelector('.countdown-text').textContent = timeLeft;
+
+            // 更新渐变角度，使颜色随时间变化
+            const gradientAngle = 360 - (timeLeft / totalTime) * 360;
+            document.querySelector('linearGradient').setAttribute('gradientTransform', `rotate(${gradientAngle} 0.5 0.5)`);
+        }
+
+        function startCountdown() {
+            // ... 现有代码 ...
+            
+            const countdownInterval = setInterval(() => {
+                timeLeft--;
+                updateProgress(timeLeft, totalTime);
+                
+                if (timeLeft <= 0) {
+                    clearInterval(countdownInterval);
+                    // ... 其他结束倒计时的逻辑 ...
+                }
+            }, 1000);
+        }
     </script>
 </body>
 </html>
