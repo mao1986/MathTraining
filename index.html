@@ -205,11 +205,19 @@
             document.getElementById('mistakeListContainer').style.display = 'none';
             document.getElementById('resultContainer').style.display = 'none';
             document.getElementById('practiceContainer').style.display = 'none';
+document.getElementById('customQuestionsContainer').style.display = 'none';
+            document.getElementById('mistakeListContainer').style.display = 'none';
+            document.getElementById('resultContainer').style.display = 'none';
+            document.getElementById('practiceContainer').style.display = 'none';
 
             if (section === 'settings') {
                 document.getElementById('settingsContainer').style.display = 'block';
             } else if (section === 'custom') {
                 document.getElementById('customQuestionsContainer').style.display = 'block';
+            } else if (section === 'mistakeList') {
+                document.getElementById('mistakeListContainer').style.display = 'block';
+            } else if (section === 'practice') {
+                document.getElementById('practiceContainer').style.display = 'block';
             }
         }
 
@@ -255,6 +263,7 @@
             document.getElementById('customQuestionsContainer').style.display = 'none';
             document.getElementById('mistakeListContainer').style.display = 'none';
             document.getElementById('resultContainer').innerHTML = '';
+            document.getElementById('practiceContainer').style.display = 'block';
             document.getElementById('practiceContainer').style.display = 'block';
 
             nextQuestion();
