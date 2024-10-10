@@ -66,6 +66,10 @@
             width: 100%;
             background-color: #ccc;
             margin-bottom: 10px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1000;
         }
         #progress {
             height: 100%;
@@ -519,14 +523,13 @@
                     containerHtml += '<p>没有错题。</p>';
                 } else {
                     containerHtml += '<ul>';
-                    filteredMistakes.forEach(q => {
+                    filteredMistakes.forEach((q, index) => {
                         containerHtml += `<li>${q.question.replace('= ?', '=')}</li>`;
                     });
                     containerHtml += '</ul>';
                     containerHtml += `<button onclick="startMistakePractice('${t.type}')">开始错题练习</button>`;
-                    if (t.type !== 'all') {
-                        containerHtml += `<button onclick="clearWrongQuestions('${t.type}')">清空错题</button>`;
-                    }
+                    containerHtml += `<button onclick="editWrongQuestions('${t.type}')">编辑错题</button>`;
+                    containerHtml += `<button onclick="clearWrongQuestions('${t.type}')">清空错题</button>`;
                 }
                 containerHtml += '</div>';
             });
@@ -562,6 +565,48 @@
             localStorage.setItem('allWrongQuestions', JSON.stringify(allWrongQuestions));
             showMistakeList();
             alert('已清空该类型的错题！');
+        }
+
+        // 编辑错题
+        function editWrongQuestions(type) {
+            const filteredMistakes = type === 'all' ? allWrongQuestions : allWrongQuestions.filter(q => q.type == type);
+            let editHtml = `<textarea id="editWrongQuestionsTextarea" style="width: 100%; height: 200px;">`;
+            filteredMistakes.forEach(q => {
+                editHtml += `${q.question} = ${q.answer}\n`;
+            });
+            editHtml += `</textarea>
+            <button onclick="saveEditedWrongQuestions('${type}')">保存</button>
+            <button onclick="cancelEditWrongQuestions()">取消</button>`;
+            document.getElementById('mistakeListContainer').innerHTML = editHtml;
+        }
+
+        // 保存编辑后的错题
+        function saveEditedWrongQuestions(type) {
+            const editedText = document.getElementById('editWrongQuestionsTextarea').value.trim();
+            const editedLines = editedText.split('\n');
+            const updatedQuestions = [];
+            editedLines.forEach(line => {
+                const [questionPart, answerPart] = line.split('=');
+                if (questionPart && answerPart) {
+                    const question = questionPart.trim();
+                    const answer = parseInt(answerPart.trim());
+                    if (!isNaN(answer)) {
+                        updatedQuestions.push({ question, answer, type });
+                    }
+                }
+            });
+            if (type === 'all') {
+                allWrongQuestions = updatedQuestions;
+            } else {
+                allWrongQuestions = allWrongQuestions.filter(q => q.type != type).concat(updatedQuestions);
+            }
+            localStorage.setItem('allWrongQuestions', JSON.stringify(allWrongQuestions));
+            showMistakeList();
+        }
+
+        // 取消编辑错题
+        function cancelEditWrongQuestions() {
+            showMistakeList();
         }
 
         // 暂停/恢复练习
